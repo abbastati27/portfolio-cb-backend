@@ -1,21 +1,23 @@
 from chromadb import PersistentClient
+from chromadb.utils import embedding_functions
 from litellm import completion
-from sentence_transformers import SentenceTransformer
 
 client = PersistentClient(path="vector_db")
-collection = client.get_or_create_collection("portfolio")
 
-embedding_model = SentenceTransformer("BAAI/bge-small-en-v1.5")
+embedding_function = embedding_functions.DefaultEmbeddingFunction()
+
+collection = client.get_or_create_collection(
+    name="portfolio",
+    embedding_function=embedding_function
+)
 
 LLM_MODEL = "groq/llama-3.1-8b-instant"
 
 
 def retrieve_context(question):
 
-    query_embedding = embedding_model.encode(question).tolist()
-
     results = collection.query(
-        query_embeddings=[query_embedding],
+        query_texts=[question],
         n_results=5
     )
 

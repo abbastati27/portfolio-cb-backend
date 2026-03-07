@@ -1,13 +1,15 @@
 from pathlib import Path
-from openai import OpenAI
 from chromadb import PersistentClient
+from chromadb.utils import embedding_functions
 
 client = PersistentClient(path="vector_db")
-collection = client.get_or_create_collection("portfolio")
 
-openai = OpenAI()
+embedding_function = embedding_functions.DefaultEmbeddingFunction()
 
-EMBED_MODEL = "text-embedding-3-small"
+collection = client.get_or_create_collection(
+    name="portfolio",
+    embedding_function=embedding_function
+)
 
 documents = []
 ids = []
@@ -25,17 +27,9 @@ for i, file in enumerate(Path("knowledge-base").glob("*.md")):
 
 print(f"Loaded {len(documents)} documents")
 
-embeddings = openai.embeddings.create(
-    model=EMBED_MODEL,
-    input=documents
-)
-
-vectors = [e.embedding for e in embeddings.data]
-
 collection.add(
     ids=ids,
-    documents=documents,
-    embeddings=vectors
+    documents=documents
 )
 
 print("Knowledge base indexed successfully.")

@@ -1,22 +1,18 @@
 from chromadb import PersistentClient
-from openai import OpenAI
 from litellm import completion
+from sentence_transformers import SentenceTransformer
 
 client = PersistentClient(path="vector_db")
 collection = client.get_or_create_collection("portfolio")
 
-openai = OpenAI()
+embedding_model = SentenceTransformer("BAAI/bge-small-en-v1.5")
 
-EMBED_MODEL = "text-embedding-3-small"
 LLM_MODEL = "groq/llama-3.1-8b-instant"
 
 
 def retrieve_context(question):
 
-    query_embedding = openai.embeddings.create(
-        model=EMBED_MODEL,
-        input=[question]
-    ).data[0].embedding
+    query_embedding = embedding_model.encode(question).tolist()
 
     results = collection.query(
         query_embeddings=[query_embedding],

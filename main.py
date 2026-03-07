@@ -2,21 +2,17 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from rag import answer_question
 from memory import get_history, save_message
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
+
+
+@app.get("/")
+def root():
+    return {"status": "running"}
 
 
 @app.post("/chat")

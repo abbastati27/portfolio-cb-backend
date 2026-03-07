@@ -8,7 +8,7 @@ collection = client.get_or_create_collection("portfolio")
 openai = OpenAI()
 
 EMBED_MODEL = "text-embedding-3-small"
-LLM_MODEL = "openai/gpt-4.1-mini"
+LLM_MODEL = "groq/llama-3.1-8b-instant"
 
 
 def retrieve_context(question):

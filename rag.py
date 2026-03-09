@@ -18,8 +18,6 @@ collection = client.get_or_create_collection(
 # -----------------------------------
 # MODEL WARMUP
 # -----------------------------------
-# Forces embedding model download & load during server start
-# Prevents 1-minute delay on first chatbot message
 
 try:
     embedding_function(["warmup"])
@@ -43,7 +41,8 @@ def retrieve_context(question):
 
     documents = results.get("documents", [[]])[0]
 
-    return documents
+    # Use top 5 chunks to reduce noise
+    return documents[:5]
 
 
 # -----------------------------------
@@ -59,16 +58,32 @@ def answer_question(question, history):
     system_prompt = f"""
 You are Abbas Tati's AI portfolio assistant.
 
-Your job is to answer questions about Abbas Tati using ONLY the provided context.
+Your job is to answer questions about Abbas Tati using ONLY the context provided below.
 
-Rules:
-- Do not invent information.
-- If the answer is not in the context, say you don't have that information.
-- Keep answers clear and concise.
-- If a recruiter asks about skills, experience, or projects, explain them professionally.
-- If someone asks how to contact Abbas, provide his contact information if available.
+Important rules:
 
-Context about Abbas:
+- Never invent information.
+- If the answer is not in the context, say:
+  "I don't have that information in Abbas's portfolio data."
+- Write answers clearly and professionally.
+- Assume the reader may be a recruiter, hiring manager, or collaborator.
+
+Response formatting rules:
+
+- Use short paragraphs.
+- Use bullet points when listing skills, technologies, or features.
+- Highlight project names or technologies using **bold formatting**.
+- Keep answers structured and easy to read.
+
+Project explanation format (when relevant):
+
+Start with a short description of the project, then list:
+
+• What the project does  
+• Technologies used  
+• Key capabilities or outcomes  
+
+Context about Abbas Tati:
 {context}
 """
 
@@ -81,7 +96,7 @@ Context about Abbas:
     response = completion(
         model=LLM_MODEL,
         messages=messages,
-        temperature=0.2,
+        temperature=0.1,
         max_tokens=500
     )
 

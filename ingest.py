@@ -6,7 +6,7 @@ from chromadb.utils import embedding_functions
 # CONFIG
 # -----------------------------------
 
-CHUNK_SIZE = 700
+CHUNK_SIZE = 600
 CHUNK_OVERLAP = 120
 
 # -----------------------------------
@@ -17,25 +17,38 @@ client = PersistentClient(path="vector_db")
 
 embedding_function = embedding_functions.DefaultEmbeddingFunction()
 
-collection = client.get_or_create_collection(
+# Delete old collection if it exists
+try:
+    client.delete_collection("portfolio")
+except:
+    pass
+
+collection = client.create_collection(
     name="portfolio",
     embedding_function=embedding_function
 )
 
 # -----------------------------------
-# CHUNKING FUNCTION
+# SMART CHUNKING
 # -----------------------------------
 
 def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+
+    paragraphs = text.split("\n\n")
+
     chunks = []
-    start = 0
+    current_chunk = ""
 
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
-        chunks.append(chunk)
+    for para in paragraphs:
 
-        start += chunk_size - overlap
+        if len(current_chunk) + len(para) < chunk_size:
+            current_chunk += "\n\n" + para
+        else:
+            chunks.append(current_chunk.strip())
+            current_chunk = para
+
+    if current_chunk:
+        chunks.append(current_chunk.strip())
 
     return chunks
 
@@ -67,10 +80,12 @@ for file in Path("knowledge-base").glob("*.md"):
         ids.append(f"{file.stem}_{i}")
 
         metadatas.append({
-            "source": file.name
+            "source": file.name,
+            "chunk": i
         })
 
         doc_counter += 1
+
 
 print(f"Created {doc_counter} chunks from knowledge base")
 

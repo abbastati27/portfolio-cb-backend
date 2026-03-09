@@ -15,6 +15,18 @@ collection = client.get_or_create_collection(
     embedding_function=embedding_function
 )
 
+# -----------------------------------
+# MODEL WARMUP
+# -----------------------------------
+# Forces embedding model download & load during server start
+# Prevents 1-minute delay on first chatbot message
+
+try:
+    embedding_function(["warmup"])
+except Exception:
+    pass
+
+
 LLM_MODEL = "groq/llama-3.1-8b-instant"
 
 
@@ -26,7 +38,7 @@ def retrieve_context(question):
 
     results = collection.query(
         query_texts=[question],
-        n_results=8   # retrieve more chunks for better coverage
+        n_results=8
     )
 
     documents = results.get("documents", [[]])[0]

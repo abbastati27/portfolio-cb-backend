@@ -1,6 +1,7 @@
 from chromadb import PersistentClient
 from chromadb.utils import embedding_functions
 from litellm import completion
+import re
 
 # -----------------------------------
 # CHROMA SETUP
@@ -41,12 +42,43 @@ def retrieve_context(question):
 
     documents = results.get("documents", [[]])[0]
 
-    # Use top 5 chunks to reduce noise
     return documents[:5]
 
 
 # -----------------------------------
-# ANSWER QUESTION
+# CLEAN OUTPUT (bullet + formatting fix)
+# -----------------------------------
+
+def clean_output(text):
+
+    lines = text.split("\n")
+
+    processed = []
+
+    for line in lines:
+
+        stripped = line.strip()
+
+        if not stripped:
+            processed.append("")
+            continue
+
+        # convert plain list items into markdown bullets
+        if (
+            not stripped.startswith("-")
+            and not stripped.startswith("#")
+            and len(stripped.split()) <= 6
+            and stripped[0].isupper()
+        ):
+            processed.append(f"- {stripped}")
+        else:
+            processed.append(stripped)
+
+    return "\n".join(processed)
+
+
+# -----------------------------------
+# STREAM ANSWER
 # -----------------------------------
 
 def answer_question(question, history):
@@ -58,65 +90,64 @@ def answer_question(question, history):
     system_prompt = f"""
 You are Abbas Tati's AI portfolio assistant.
 
-Your job is to answer questions about Abbas Tati using ONLY the information provided in the context.
+You help visitors understand Abbas's experience, projects, skills, and background.
 
-The user may be a recruiter, hiring manager, collaborator, or visitor exploring Abbas's portfolio.
+Users may include recruiters, hiring managers, collaborators, or people exploring his portfolio.
 
---------------------
+--------------------------------
 RULES
---------------------
+--------------------------------
 
-- Do NOT invent information.
-- If the answer is not present in the context, say:
-  "I don't have that information in Abbas's portfolio data."
-- Only use facts from the provided context.
+- Use ONLY the provided context.
+- Do NOT invent facts.
+- If information is missing say:
+"I don't have that information in Abbas's portfolio data."
 
---------------------
-RESPONSE STYLE
---------------------
+--------------------------------
+STYLE
+--------------------------------
 
-- Write clear, professional, and concise answers.
-- Prefer short paragraphs instead of long blocks of text.
-- Keep responses easy to read.
-- Avoid unnecessary explanations.
-- Most answers should stay under about 120 words unless more detail is needed.
+Write responses that are:
 
---------------------
-LIST FORMATTING
---------------------
+- Professional
+- Clear
+- Concise
+- Easy to read in a chat interface
 
-When listing multiple items (skills, technologies, areas of study, project features, etc.):
+Prefer:
 
-- Always use Markdown bullet lists.
-- Each bullet must start on a new line.
-- Use '-' as the bullet marker.
-- Never place multiple bullet points on the same line.
-- Never use inline bullets like "• item1 • item2".
+Short paragraphs.
 
-Correct example:
+--------------------------------
+LISTS
+--------------------------------
 
-- Data Science
+When listing items like skills or technologies ALWAYS format them as Markdown bullet lists.
+
+Example:
+
 - Machine Learning
-- Web Development
-- Cloud Computing
+- Deep Learning
+- Natural Language Processing
 
-Incorrect example:
+Rules:
 
-• Data Science • Machine Learning • Web Development
+- Every bullet must start with "-"
+- Each bullet must appear on its own line
+- Never place multiple bullet items on one line
+- Never use inline bullets like "• item • item"
 
---------------------
+--------------------------------
 FORMATTING
---------------------
+--------------------------------
 
-- Use Markdown formatting.
-- Leave a blank line between paragraphs.
-- Use bullet lists only when appropriate.
-- Avoid excessive bullet lists.
-- Ensure the final response is clean and readable inside a chat interface.
+- Use Markdown
+- Leave a blank line between paragraphs
+- Keep responses concise (usually under 120 words)
 
---------------------
+--------------------------------
 CONTEXT ABOUT ABBAS
---------------------
+--------------------------------
 
 {context}
 """
@@ -127,11 +158,16 @@ CONTEXT ABOUT ABBAS
         {"role": "user", "content": question}
     ]
 
-    response = completion(
+    stream = completion(
         model=LLM_MODEL,
         messages=messages,
         temperature=0.1,
-        max_tokens=500
+        max_tokens=400,
+        stream=True
     )
 
-    return response.choices[0].message.content
+    for chunk in stream:
+
+        token = chunk.choices[0].delta.content or ""
+
+        yield token

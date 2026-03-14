@@ -6,6 +6,15 @@ from fastapi.responses import StreamingResponse
 from rag import answer_question
 from memory import get_history, save_message
 
+import logging
+
+# -----------------------------------
+# LOGGING
+# -----------------------------------
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("chat-api")
+
 app = FastAPI()
 
 # -----------------------------------
@@ -31,6 +40,7 @@ class ChatRequest(BaseModel):
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def root():
+    logger.info("Health check endpoint called")
     return {"status": "running"}
 
 
@@ -39,7 +49,9 @@ def root():
 # -----------------------------------
 
 @app.post("/chat")
-def chat(data: ChatRequest):
+async def chat(data: ChatRequest):
+
+    logger.info(f"Incoming message: {data.message}")
 
     history = get_history(data.session_id)
 
@@ -47,15 +59,28 @@ def chat(data: ChatRequest):
 
     stream = answer_question(data.message, history)
 
-    def generate():
+    async def generate():
 
         full_answer = ""
+
+        logger.info("Streaming response started")
 
         for token in stream:
 
             full_answer += token
+
             yield token
+
+        logger.info("Streaming finished")
 
         save_message(data.session_id, "assistant", full_answer)
 
-    return StreamingResponse(generate(), media_type="text/plain")
+    return StreamingResponse(
+        generate(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )

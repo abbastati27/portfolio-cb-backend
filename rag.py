@@ -1,7 +1,14 @@
 from chromadb import PersistentClient
 from chromadb.utils import embedding_functions
 from litellm import completion
-import re
+import logging
+
+# -----------------------------------
+# LOGGING
+# -----------------------------------
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("rag")
 
 # -----------------------------------
 # CHROMA SETUP
@@ -22,8 +29,9 @@ collection = client.get_or_create_collection(
 
 try:
     embedding_function(["warmup"])
-except Exception:
-    pass
+    logger.info("Embedding model warmed up successfully")
+except Exception as e:
+    logger.error(f"Embedding warmup failed: {e}")
 
 
 LLM_MODEL = "groq/llama-3.1-8b-instant"
@@ -35,6 +43,8 @@ LLM_MODEL = "groq/llama-3.1-8b-instant"
 
 def retrieve_context(question):
 
+    logger.info(f"Retrieving context for question: {question}")
+
     results = collection.query(
         query_texts=[question],
         n_results=6
@@ -42,39 +52,9 @@ def retrieve_context(question):
 
     documents = results.get("documents", [[]])[0]
 
+    logger.info(f"Retrieved {len(documents)} documents from vector DB")
+
     return documents[:5]
-
-
-# -----------------------------------
-# CLEAN OUTPUT (bullet + formatting fix)
-# -----------------------------------
-
-def clean_output(text):
-
-    lines = text.split("\n")
-
-    processed = []
-
-    for line in lines:
-
-        stripped = line.strip()
-
-        if not stripped:
-            processed.append("")
-            continue
-
-        # convert plain list items into markdown bullets
-        if (
-            not stripped.startswith("-")
-            and not stripped.startswith("#")
-            and len(stripped.split()) <= 6
-            and stripped[0].isupper()
-        ):
-            processed.append(f"- {stripped}")
-        else:
-            processed.append(stripped)
-
-    return "\n".join(processed)
 
 
 # -----------------------------------
@@ -94,35 +74,19 @@ You help visitors understand Abbas's experience, projects, skills, and backgroun
 
 Users may include recruiters, hiring managers, collaborators, or people exploring his portfolio.
 
---------------------------------
-RULES
---------------------------------
-
+RULES:
 - Use ONLY the provided context.
 - Do NOT invent facts.
 - If information is missing say:
 "I don't have that information in Abbas's portfolio data."
 
---------------------------------
-STYLE
---------------------------------
-
-Write responses that are:
-
+STYLE:
 - Professional
 - Clear
 - Concise
-- Easy to read in a chat interface
+- Easy to read
 
-Prefer:
-
-Short paragraphs.
-
---------------------------------
-LISTS
---------------------------------
-
-When listing items like skills or technologies ALWAYS format them as Markdown bullet lists.
+Use bullet lists when listing skills or technologies.
 
 Example:
 
@@ -130,25 +94,12 @@ Example:
 - Deep Learning
 - Natural Language Processing
 
-Rules:
-
-- Every bullet must start with "-"
-- Each bullet must appear on its own line
-- Never place multiple bullet items on one line
-- Never use inline bullets like "• item • item"
-
---------------------------------
-FORMATTING
---------------------------------
-
+FORMAT:
 - Use Markdown
-- Leave a blank line between paragraphs
-- Keep responses concise (usually under 120 words)
+- Leave blank lines between paragraphs
+- Keep responses concise
 
---------------------------------
-CONTEXT ABOUT ABBAS
---------------------------------
-
+CONTEXT:
 {context}
 """
 
@@ -157,6 +108,8 @@ CONTEXT ABOUT ABBAS
     ] + history + [
         {"role": "user", "content": question}
     ]
+
+    logger.info("Sending request to LLM")
 
     stream = completion(
         model=LLM_MODEL,
@@ -168,6 +121,13 @@ CONTEXT ABOUT ABBAS
 
     for chunk in stream:
 
-        token = chunk.choices[0].delta.content or ""
+        token = ""
 
-        yield token
+        try:
+            if hasattr(chunk.choices[0], "delta"):
+                token = chunk.choices[0].delta.get("content", "")
+        except Exception as e:
+            logger.error(f"Chunk parsing error: {e}")
+
+        if token:
+            yield token
